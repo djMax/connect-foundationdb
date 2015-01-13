@@ -122,36 +122,43 @@ module.exports = function (connect) {
         var session;
         this.fdb.doTransaction(function (tr, commit) {
             var whichRead = self.snapshotReads ? tr.snapshot : tr;
-            whichRead.getKey(self.dir.pack(['data', sid]), function (err, sdoc) {
+            whichRead.get(self.dir.pack(['data', sid]), function (err, sdoc) {
                 session = sdoc;
             });
             commit();
         })(function (err) {
             if (err) {
-                debug('not able to execute `find` query for session: ' + sid);
+                debug('not able to execute `find` query for session: %s', sid);
                 return callback(err);
             }
-            if (session) {
-                try {
-                    session = JSON.parse(session);
-                } catch (parseException) {
-                    return callback(parseException);
-                }
-                if (!session.expires || Date.now() < session.expires) {
-                    var s;
+            try {
+                if (session) {
                     try {
-                        s = self.unserializeSession(session.session);
-                    } catch (err) {
-                        debug('unable to deserialize session');
-                        return callback(err);
+                        session = JSON.parse(session);
+                    } catch (parseException) {
+                        debug('session failed to parse: %s', sid);
+                        return callback(parseException);
                     }
-                    callback(null, s);
+                    if (!session.expires || Date.now() < session.expires) {
+                        var s;
+                        try {
+                            s = self.unserializeSession(session.session);
+                        } catch (err) {
+                            debug('unable to deserialize session');
+                            return callback(err);
+                        }
+                        callback(null, s);
+                    } else {
+                        debug('destroying expired session');
+                        self.destroy(sid, callback);
+                    }
                 } else {
-                    self.destroy(sid, callback);
+                    debug('not able to find session: %s', sid);
+                    return callback();
                 }
-            } else {
-                debug('not able to find session: %s', sid);
-                return callback();
+            } catch (x) {
+                debug('exception finding session %s: %s', sid, x.message);
+                throw x;
             }
         });
     };
@@ -177,7 +184,7 @@ module.exports = function (connect) {
         }
 
         if (session && session.cookie && session.cookie.expires) {
-            s.expires = new Date(session.cookie.expires);
+            s.expires = new Date(session.cookie.expires).getTime();
         } else {
             // If there's no expiration date specified, it is
             // browser-session cookie or there is no cookie at all,
@@ -187,7 +194,7 @@ module.exports = function (connect) {
             // - as is common practice in the industry (e.g Django) -
             // or the default specified in the options.
             var today = new Date();
-            s.expires = new Date(today.getTime() + this.defaultExpirationTime);
+            s.expires = today.getTime() + this.defaultExpirationTime;
         }
 
         var self = this;
@@ -197,6 +204,49 @@ module.exports = function (connect) {
         })(function (err) {
             if (err) debug('not able to set/update session: ' + sid);
             callback(err);
+        });
+    };
+
+    /**
+     * Destroy the session associated with the given `sid`.
+     *
+     * @param {String} sid
+     * @param {Function} callback
+     * @api public
+     */
+
+    FDBStore.prototype.destroy = function (sid, callback) {
+        var self = this;
+        if (!callback) callback = noop;
+        sid = this.hash ? crypto.createHash(this.hash.algorithm).update(this.hash.salt + sid).digest('hex') : sid;
+        this.fdb.doTransaction(function (tr, commit) {
+            tr.clear(self.dir.pack(['data', sid]));
+        })(function (err) {
+            if (err) debug('not able to clear session: ' + sid);
+            callback(err);
+        });
+    };
+
+    /**
+     * Fetch number of sessions.
+     *
+     * @param {Function} callback
+     * @api public
+     */
+
+    FDBStore.prototype.length = function (callback) {
+        if (!callback) callback = noop;
+        // Right now there's no good way to get a count in FDB without fetching them all, which is nuts.
+        // Storing a counter is also problematic because it's unclear whether a key was inserted or not
+        // when we set it (right?)
+        var self = this;
+        this.fdb.doTransaction(function (tr, commit) {
+            var whichRead = self.snapshotReads ? tr.snapshot : tr;
+            var range = self.dir.range();
+            whichRead.getRange(range.begin, range.end).toArray(function (err, arr) {
+                callback(err, arr ? arr.length : 0);
+            });
+            commit();
         });
     };
 
