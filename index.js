@@ -91,7 +91,7 @@ module.exports = function (connect) {
             changeState('connected');
         }
 
-        this.fdb = FoundationDb.open(options.clusterFile);
+        this.fdb = options.fdb || FoundationDb.open(options.clusterFile);
 
         changeState('init');
         FoundationDb.directory.createOrOpen(this.fdb, directory)(function (err, dir) {
