@@ -1,4 +1,5 @@
 # connect-foundationdb
+[![Build Status](https://travis-ci.org/djMax/connect-foundationdb.png)](https://travis-ci.org/djMax/connect-foundationdb)
 
 FoundationDb session store for [Connect](https://github.com/senchalabs/connect) and [Express](http://expressjs.com/)
 based on [connect-mongo](https://github.com/kcbanner/connect-mongo)
