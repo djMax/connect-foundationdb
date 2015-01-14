@@ -124,8 +124,8 @@ module.exports = function (connect) {
             var whichRead = self.snapshotReads ? tr.snapshot : tr;
             whichRead.get(self.dir.pack(['data', sid]), function (err, sdoc) {
                 session = sdoc;
+                commit(err);
             });
-            commit();
         })(function (err) {
             if (err) {
                 debug('not able to execute `find` query for session: %s', sid);
@@ -197,9 +197,9 @@ module.exports = function (connect) {
             s.expires = today.getTime() + this.defaultExpirationTime;
         }
 
-        var self = this;
+        var self = this, content = JSON.stringify(s);
         this.fdb.doTransaction(function (tr, commit) {
-            tr.set(self.dir.pack(['data', sid]), JSON.stringify(s));
+            tr.set(self.dir.pack(['data', sid]), content);
             commit();
         })(function (err) {
             if (err) debug('not able to set/update session: ' + sid);
@@ -221,8 +221,9 @@ module.exports = function (connect) {
         sid = this.hash ? crypto.createHash(this.hash.algorithm).update(this.hash.salt + sid).digest('hex') : sid;
         this.fdb.doTransaction(function (tr, commit) {
             tr.clear(self.dir.pack(['data', sid]));
+            commit();
         })(function (err) {
-            if (err) debug('not able to clear session: ' + sid);
+            if (err) debug('Not able to clear session: ' + sid);
             callback(err);
         });
     };
@@ -260,8 +261,15 @@ module.exports = function (connect) {
     FDBStore.prototype.clear = function (callback) {
         if (!callback) callback = noop;
 
-        debug('cleared session directory');
-        FoundationDb.directory.removeIfExists(this.fdb, this.dir.getPath())(callback);
+        var range = this.dir.range();
+        this.fdb.clearRange(range.begin, range.end)(function (err) {
+            if (err) {
+                debug('Could not clear sessions: %s', err.message);
+            } else {
+                debug('Cleared session directory');
+            }
+            callback(err);
+        });
     };
 
     return FDBStore;

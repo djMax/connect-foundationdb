@@ -124,6 +124,12 @@ describe('connect-foundationdb', function () {
             }));
     });
 
+    it('should destroy a session', function destroySession(done) {
+        fs.destroy('thisisatest2', eat(done, function () {
+           done();
+        }));
+    });
+
     after(function cleanup(done) {
         fs.clear(done);
     });
