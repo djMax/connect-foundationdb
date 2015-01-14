@@ -96,6 +96,7 @@ module.exports = function (connect) {
         changeState('init');
         FoundationDb.directory.createOrOpen(this.fdb, directory)(function (err, dir) {
             self.dir = dir;
+            self.countKey = dir.pack(['count']);
             connectionReady(err);
         });
         changeState('connecting');
@@ -197,10 +198,19 @@ module.exports = function (connect) {
             s.expires = today.getTime() + this.defaultExpirationTime;
         }
 
-        var self = this;
+        var self = this, sessionRecordKey = this.dir.pack(['data',sid]),
+            expireIndexKey = this.dir.pack(['exp', s.expires, sid]);
         this.fdb.doTransaction(function (tr, commit) {
-            tr.set(self.dir.pack(['data', sid]), JSON.stringify(s));
-            commit();
+            tr.get(sessionRecordKey, function (readErr, existingSession) {
+               if (readErr) {
+                   return commit(readErr);
+               }
+                if (!existingSession) {
+                    tr.add(self.countKey, 1);
+                }
+                tr.set(sessionRecordKey, JSON.stringify(s));
+                commit();
+            });
         })(function (err) {
             if (err) debug('not able to set/update session: ' + sid);
             callback(err);
@@ -219,8 +229,18 @@ module.exports = function (connect) {
         var self = this;
         if (!callback) callback = noop;
         sid = this.hash ? crypto.createHash(this.hash.algorithm).update(this.hash.salt + sid).digest('hex') : sid;
+        var sessionRecordKey = this.dir.pack(['data',sid]);
         this.fdb.doTransaction(function (tr, commit) {
-            tr.clear(self.dir.pack(['data', sid]));
+            tr.get(sessionRecordKey, function (readErr, existingSession) {
+                if (readErr) {
+                    return commit(readErr);
+                }
+                if (existingSession) {
+                    tr.add(self.countKey, -1);
+                }
+                tr.clear(sessionRecordKey);
+                commit();
+            });
         })(function (err) {
             if (err) debug('not able to clear session: ' + sid);
             callback(err);
