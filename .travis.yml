@@ -1,0 +1,6 @@
+language: node_js
+node_js:
+  - 0.10
+before_install:
+  - wget https://foundationdb.com/downloads/token/f0b10f6c-a9e4-4fe7-a23a-8c810cc73618/key-value-store/3.0.5/foundationdb-server_3.0.5-1_amd64.deb
+  - sudo dpkg -i foundationdb-server_3.0.5-1_amd64.deb

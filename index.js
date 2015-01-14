@@ -43,6 +43,16 @@ function identity(x) {
     return x;
 }
 
+function intToBuffer(intVal) {
+    var value = new Buffer(4);
+    value.writeInt32LE(intVal,0);
+    return value;
+}
+
+function bufferToInt(buffer) {
+    return buffer.readInt32LE(0);
+}
+
 module.exports = function (connect) {
     var Store = connect.Store || connect.session.Store;
 
@@ -55,7 +65,7 @@ module.exports = function (connect) {
         // Hash sid
         if (options.hash) {
             var defaultSalt = 'connect-foundationdb';
-            var defaultAlgorithm = 'sha1';
+            var defaultAlgorithm = 'sha256';
             this.hash = {};
             this.hash.salt = options.hash.salt ? options.hash.salt : defaultSalt;
             this.hash.algorithm = options.hash.algorithm ? options.hash.algorithm : defaultAlgorithm;
@@ -72,7 +82,6 @@ module.exports = function (connect) {
 
         // Expiration time
         this.defaultExpirationTime = options.defaultExpirationTime || defaultOptions.defaultExpirationTime;
-        this.snapshotReads = (options.snapshotReads === true);
 
         var self = this;
 
@@ -122,11 +131,10 @@ module.exports = function (connect) {
 
         var session;
         this.fdb.doTransaction(function (tr, commit) {
-            var whichRead = self.snapshotReads ? tr.snapshot : tr;
-            whichRead.get(self.dir.pack(['data', sid]), function (err, sdoc) {
+            tr.get(self.dir.pack(['data', sid]), function (err, sdoc) {
                 session = sdoc;
+                commit(err);
             });
-            commit();
         })(function (err) {
             if (err) {
                 debug('not able to execute `find` query for session: %s', sid);
@@ -198,17 +206,17 @@ module.exports = function (connect) {
             s.expires = today.getTime() + this.defaultExpirationTime;
         }
 
-        var self = this, sessionRecordKey = this.dir.pack(['data',sid]),
-            expireIndexKey = this.dir.pack(['exp', s.expires, sid]);
+        var self = this, sessionRecordKey = this.dir.pack(['data', sid]),
+            content = JSON.stringify(s);
         this.fdb.doTransaction(function (tr, commit) {
             tr.get(sessionRecordKey, function (readErr, existingSession) {
-               if (readErr) {
-                   return commit(readErr);
-               }
-                if (!existingSession) {
-                    tr.add(self.countKey, 1);
+                if (readErr) {
+                    return commit(readErr);
                 }
-                tr.set(sessionRecordKey, JSON.stringify(s));
+                if (!existingSession) {
+                    tr.add(self.countKey, intToBuffer(1));
+                }
+                tr.set(sessionRecordKey, content);
                 commit();
             });
         })(function (err) {
@@ -229,20 +237,20 @@ module.exports = function (connect) {
         var self = this;
         if (!callback) callback = noop;
         sid = this.hash ? crypto.createHash(this.hash.algorithm).update(this.hash.salt + sid).digest('hex') : sid;
-        var sessionRecordKey = this.dir.pack(['data',sid]);
+        var sessionRecordKey = this.dir.pack(['data', sid]);
         this.fdb.doTransaction(function (tr, commit) {
             tr.get(sessionRecordKey, function (readErr, existingSession) {
                 if (readErr) {
                     return commit(readErr);
                 }
                 if (existingSession) {
-                    tr.add(self.countKey, -1);
+                    tr.add(self.countKey, intToBuffer(-1));
                 }
                 tr.clear(sessionRecordKey);
                 commit();
             });
         })(function (err) {
-            if (err) debug('not able to clear session: ' + sid);
+            if (err) debug('Not able to clear session: ' + sid);
             callback(err);
         });
     };
@@ -256,17 +264,22 @@ module.exports = function (connect) {
 
     FDBStore.prototype.length = function (callback) {
         if (!callback) callback = noop;
-        // Right now there's no good way to get a count in FDB without fetching them all, which is nuts.
-        // Storing a counter is also problematic because it's unclear whether a key was inserted or not
-        // when we set it (right?)
-        var self = this;
+        var self = this, sessionCount = 0;
+        // We maintain the count separately. I bet there are some crazy conditions
+        // that could cause this to be off by some small number. The cleanup
+        // script (that isn't written yet) should take this into account
         this.fdb.doTransaction(function (tr, commit) {
-            var whichRead = self.snapshotReads ? tr.snapshot : tr;
-            var range = self.dir.range();
-            whichRead.getRange(range.begin, range.end).toArray(function (err, arr) {
-                callback(err, arr ? arr.length : 0);
+            tr.get(self.countKey, function (readError, count) {
+                if (readError) {
+                    return commit(readError);
+                }
+                if (count) {
+                    sessionCount = bufferToInt(count);
+                }
+                commit();
             });
-            commit();
+        }, function (e) {
+            callback(e, sessionCount);
         });
     };
 
@@ -280,8 +293,19 @@ module.exports = function (connect) {
     FDBStore.prototype.clear = function (callback) {
         if (!callback) callback = noop;
 
-        debug('cleared session directory');
-        FoundationDb.directory.removeIfExists(this.fdb, this.dir.getPath())(callback);
+        var self = this, range = this.dir.range();
+        this.fdb.doTransaction(function (tr, commit) {
+            tr.clearRange(range.begin, range.end);
+            tr.clear(self.countKey);
+            commit();
+        }, function (err) {
+            if (err) {
+                debug('Could not clear sessions: %s', err.message);
+            } else {
+                debug('Cleared session directory');
+            }
+            callback(err);
+        });
     };
 
     return FDBStore;

@@ -35,7 +35,8 @@ describe('connect-foundationdb', function () {
 
     it('should create the FDBStore', function createStore(done) {
         fs = new FoundationStore({
-            directory: 'test-sessions'
+            directory: 'test-sessions',
+            hash: {}
         });
         fs.on('connected', cb(function (e) {
             FoundationDb.directory.open(mydb, 'test-sessions')(eat(done, function (d) {
@@ -122,6 +123,12 @@ describe('connect-foundationdb', function () {
                     commit();
                 })();
             }));
+    });
+
+    it('should destroy a session', function destroySession(done) {
+        fs.destroy('thisisatest2', eat(done, function () {
+           done();
+        }));
     });
 
     after(function cleanup(done) {
