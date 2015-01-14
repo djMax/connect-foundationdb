@@ -55,7 +55,7 @@ module.exports = function (connect) {
         // Hash sid
         if (options.hash) {
             var defaultSalt = 'connect-foundationdb';
-            var defaultAlgorithm = 'sha1';
+            var defaultAlgorithm = 'sha256';
             this.hash = {};
             this.hash.salt = options.hash.salt ? options.hash.salt : defaultSalt;
             this.hash.algorithm = options.hash.algorithm ? options.hash.algorithm : defaultAlgorithm;
