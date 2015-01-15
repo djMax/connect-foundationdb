@@ -5,3 +5,5 @@ before_install:
   - wget https://foundationdb.com/downloads/token/5e4ef4a1-d727-43e0-927e-0060bd997739/key-value-store/3.0.5/foundationdb-clients_3.0.5-1_amd64.deb
   - wget https://foundationdb.com/downloads/token/f0b10f6c-a9e4-4fe7-a23a-8c810cc73618/key-value-store/3.0.5/foundationdb-server_3.0.5-1_amd64.deb
   - sudo dpkg -i foundationdb-server_3.0.5-1_amd64.deb foundationdb-clients_3.0.5-1_amd64.deb
+after_script:
+  - NODE_ENV=test istanbul cover ./node_modules/mocha/bin/_mocha --report lcovonly -- -R spec && cat ./coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js && rm -rf ./coverage

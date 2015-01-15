@@ -7,8 +7,47 @@
 var crypto = require('crypto');
 var util = require('util');
 var FoundationDb = require('fdb').apiVersion(300);
-
 var debug = require('debuglog')('connect-foundationdb');
+
+var BSON;
+
+try {
+    var bson = require('bson');
+    try {
+        var native = bson.native(),
+            Long = native.Long,
+            ObjectID = native.ObjectID,
+            Binary = native.Binary,
+            Code = native.Code,
+            DBRef = native.DBRef,
+            Symbol = native.Symbol,
+            Double = native.Double,
+            Timestamp = native.Timestamp,
+            MaxKey = native.MaxKey,
+            MinKey = native.MinKey;
+
+        BSON = new (native.BSON)([Long, ObjectID, Binary, Code, DBRef, Symbol, Double, Timestamp, MaxKey, MinKey]);
+        debug('Using native BSON parser.');
+    } catch (ignored) {
+        BSON = bson.BSONPure.BSON;
+        debug('Using Javascript BSON parser.');
+    }
+} catch (ignored) {
+    debug('Using JSON parser.');
+}
+
+function sessionToFDBValue(s) {
+    if (BSON) {
+        return BSON.serialize(s, false, true, false);
+    }
+    return JSON.stringify(s);
+}
+function sessionFromFDBValue(buffer) {
+    if (BSON) {
+        return BSON.deserialize(buffer);
+    }
+    return JSON.parse(buffer);
+}
 
 var noop = function () {
 };
@@ -143,7 +182,7 @@ module.exports = function (connect) {
             try {
                 if (session) {
                     try {
-                        session = JSON.parse(session);
+                        session = sessionFromFDBValue(session);
                     } catch (parseException) {
                         debug('session failed to parse: %s', sid);
                         return callback(parseException);
@@ -152,9 +191,9 @@ module.exports = function (connect) {
                         var s;
                         try {
                             s = self.unserializeSession(session.session);
-                        } catch (err) {
+                        } catch (unserializeError) {
                             debug('unable to deserialize session');
-                            return callback(err);
+                            return callback(unserializeError);
                         }
                         callback(null, s);
                     } else {
@@ -207,7 +246,7 @@ module.exports = function (connect) {
         }
 
         var self = this, sessionRecordKey = this.dir.pack(['data', sid]),
-            content = JSON.stringify(s);
+            content = sessionToFDBValue(s);
         this.fdb.doTransaction(function (tr, commit) {
             tr.get(sessionRecordKey, function (readErr, existingSession) {
                 if (readErr) {

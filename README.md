@@ -1,5 +1,9 @@
 # connect-foundationdb
 [![Build Status](https://travis-ci.org/djMax/connect-foundationdb.png)](https://travis-ci.org/djMax/connect-foundationdb)
+[![Dependency Status](https://gemnasium.com/djMax/connect-foundationdb.png)](https://gemnasium.com/djMax/connect-foundationdb)
+[![Coverage Status](https://coveralls.io/repos/djMax/connect-foundationdb/badge.png?branch=master)](https://coveralls.io/r/djMax/connect-foundationdb?branch=master)
+[![Code Climate](https://codeclimate.com/github/djMax/connect-foundationdb.png)](https://codeclimate.com/github/djMax/connect-foundationdb)
+[![npm version](https://badge.fury.io/js/connect-foundationdb.svg)](http://badge.fury.io/js/connect-foundationdb)
 
 FoundationDb session store for [Connect](https://github.com/senchalabs/connect) and [Express](http://expressjs.com/)
 based on [connect-mongo](https://github.com/kcbanner/connect-mongo)
@@ -10,6 +14,7 @@ based on [connect-mongo](https://github.com/kcbanner/connect-mongo)
 * Support Express `2.x`, `3.x` and Connect `>= 1.0.3`, `2.x`
 * Support [foundation db driver](https://www.npmjs.com/package/fdb) `>= 300`
 * Support Node.js `0.10` and `0.11` (maybe)
+* Will use [js-bson](https://github.com/mongodb/js-bson} as a default serializer if available
 
 ## Usage
 

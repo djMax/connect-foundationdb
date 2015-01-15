@@ -1,4 +1,7 @@
+/*jslint node: true */
+/*global describe, it, before, beforeEach, after, afterEach */
 'use strict';
+
 var assert = require('assert'),
     cb = require('assert-called'),
     session = require('express-session'),
@@ -21,7 +24,7 @@ describe('connect-foundationdb', function () {
             } catch (x) {
                 done(x);
             }
-        }
+        };
     };
 
     // Cleanup any existing collection
@@ -44,7 +47,7 @@ describe('connect-foundationdb', function () {
                 range = d.range();
                 done();
             }));
-        }))
+        }));
     });
 
     it('should have a 0 count', function count0session(done) {
